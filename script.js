@@ -1,4 +1,4 @@
-const API_TOKEN = "SEU_API_KEY_AQUI"; 
+const API_TOKEN = "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"; 
 const MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
 
 async function generateImage() {
