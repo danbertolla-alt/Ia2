@@ -1,11 +1,11 @@
-const API_TOKEN = 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; 
-const MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
+const API_TOKEN = "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";
+const MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
 
 async function generateImage() {
-  const promptInput = document.getElementById('prompt').value;
-  const btn = document.getElementById('generate-btn');
-  const loading = document.getElementById('loading');
-  const resultImg = document.getElementById('result-img');
+  const promptInput = document.getElementById("prompt").value;
+  const btn = document.getElementById("generate-btn");
+  const loading = document.getElementById("loading");
+  const resultImg = document.getElementById("result-img");
 
   if (!promptInput.trim()) {
     alert("Por favor, digite uma descrição para a imagem!");
@@ -13,7 +13,7 @@ async function generateImage() {
   }
 
   btn.disabled = true;
-  loading.classList.remove('hidden');
+  loading.classList.remove("hidden");
   resultImg.src = "";
 
   try {
@@ -26,15 +26,25 @@ async function generateImage() {
       body: JSON.stringify({ inputs: promptInput }),
     });
 
-    if (!response.ok) throw new Error("Erro na geração da imagem.");
+    if (!response.ok) {
+      let detalhes = "";
+      try {
+        const erroJson = await response.json();
+        detalhes = erroJson.error || JSON.stringify(erroJson);
+      } catch (_) {
+        detalhes = await response.text();
+      }
+      throw new Error(`HTTP ${response.status}: ${detalhes || "Erro na API"}`);
+    }
 
     const blob = await response.blob();
     resultImg.src = URL.createObjectURL(blob);
   } catch (error) {
-    alert("Ocorreu um erro ao gerar a imagem. Tente novamente.");
+    const motivo = error && error.message ? error.message : "Falha de conexão ou bloqueio no navegador.";
+    alert(`Falha ao gerar imagem: ${motivo}`);
     console.error(error);
   } finally {
     btn.disabled = false;
-    loading.classList.add('hidden');
+    loading.classList.add("hidden");
   }
 }
