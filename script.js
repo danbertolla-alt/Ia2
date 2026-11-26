@@ -1,5 +1,5 @@
 const API_TOKEN = "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";
-const MODEL_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
+const MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev";
 
 async function generateImage() {
   const promptInput = document.getElementById("prompt").value;
@@ -40,7 +40,8 @@ async function generateImage() {
     const blob = await response.blob();
     resultImg.src = URL.createObjectURL(blob);
   } catch (error) {
-    alert(`Falha ao gerar imagem: ${error.message}`);
+    const motivo = error && error.message ? error.message : "Falha de conexão ou bloqueio no navegador.";
+    alert(`Falha ao gerar imagem: ${motivo}`);
     console.error(error);
   } finally {
     btn.disabled = false;
