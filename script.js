@@ -1,82 +1,129 @@
-const MODELOS = [
+const MODELOS_SUPORTADOS = [
   "black-forest-labs/FLUX.1-Krea-dev",
   "ByteDance/Hyper-SD",
-  "Qwen/Qwen-Image"
+  "Qwen/Qwen-Image",
 ];
 
-let tokenHf = "";
+let tokenSessao = "";
+let emExecucao = false;
 
-async function generateImage() {
-  const campoPrompt = document.getElementById("prompt");
-  const botao = document.getElementById("generate-btn");
-  const carregando = document.getElementById("loading");
-  const imagemResultado = document.getElementById("result-img");
+async function rodarGeracao() {
+  if (emExecucao) return;
 
-  const texto = campoPrompt ? campoPrompt.value.trim() : "";
-  if (!texto) {
-    alert("Digite uma descrição para a imagem.");
+  const campoTexto =
+    document.getElementById("prompt") ||
+    document.querySelector("textarea, input[type='text'], input:not([type])");
+
+  const botao =
+    document.getElementById("generate-btn") ||
+    document.querySelector("button, input[type='submit']");
+
+  const carregando =
+    document.getElementById("loading") ||
+    document.querySelector("[id*='load'], [class*='load']");
+
+  const imagemSaida =
+    document.getElementById("result-img") ||
+    document.querySelector("img");
+
+  const descricao = campoTexto ? String(campoTexto.value || "").trim() : "";
+
+  if (!descricao) {
+    alert("Digite uma descrição para a imagem antes de clicar.");
     return;
   }
 
-  if (!tokenHf) {
-    const digitado = prompt("Cole seu token hf_...:");
+  if (!tokenSessao) {
+    const digitado = window.prompt("Cole aqui o seu token do Hugging Face (hf_...):");
     if (!digitado || !digitado.trim()) {
-      alert("Token obrigatório.");
+      alert("Você precisa colar um token hf_... para continuar.");
       return;
     }
-    tokenHf = digitado.trim();
+    tokenSessao = digitado.trim();
   }
 
+  emExecucao = true;
   if (botao) botao.disabled = true;
   if (carregando) carregando.classList.remove("hidden");
 
   try {
-    let ultimoErro = "";
+    let ultimoErro = "Falha desconhecida";
 
-    for (let i = 0; i < MODELOS.length; i++) {
-      const modelo = MODELOS[i];
-      const url = "https://router.huggingface.co/hf-inference/models/" + modelo;
-
-      const resposta = await fetch(url, {
+    for (const modelo of MODELOS_SUPORTADOS) {
+      const url = `https://router.huggingface.co/hf-inference/models/${modelo}`;
+      const resp = await fetch(url, {
         method: "POST",
         headers: {
-          "Authorization": "Bearer " + tokenHf,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${tokenSessao}`,
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ inputs: texto })
+        body: JSON.stringify({ inputs: descricao }),
       });
 
-      if (resposta.ok) {
-        const blob = await resposta.blob();
-        if (imagemResultado) {
-          imagemResultado.src = URL.createObjectURL(blob);
-          imagemResultado.style.display = "block";
+      if (resp.ok) {
+        const blob = await resp.blob();
+        if (imagemSaida) {
+          imagemSaida.src = URL.createObjectURL(blob);
+          imagemSaida.style.display = "block";
         }
         return;
       }
 
-      if (resposta.status === 401) {
-        tokenHf = "";
-        ultimoErro = "HTTP 401 (Token inválido)";
+      if (resp.status === 401) {
+        tokenSessao = "";
+        ultimoErro = `HTTP 401 (${modelo}): Token inválido ou recusado`;
         break;
       }
 
-      const erroTexto = await resposta.text();
-      ultimoErro = "HTTP " + resposta.status + " (" + modelo + "): " + erroTexto;
+      let detalhe = "";
+      try {
+        detalhe = await resp.text();
+      } catch (_) {
+        detalhe = "";
+      }
+      ultimoErro = `HTTP ${resp.status} (${modelo}): ${detalhe || "Sem detalhes"}`;
     }
 
-    alert("Falhou: " + ultimoErro);
-  } catch (err) {
-    alert("Erro de rede/código: " + (err.message || err));
+    alert(`Não foi possível gerar a imagem:\n${ultimoErro}`);
+  } catch (erro) {
+    alert(`Erro no navegador/rede:\n${erro && erro.message ? erro.message : String(erro)}`);
   } finally {
+    emExecucao = false;
     if (botao) botao.disabled = false;
     if (carregando) carregando.classList.add("hidden");
   }
 }
 
-window.addEventListener("DOMContentLoaded", function () {
-  const botao = document.getElementById("generate-btn");
-  if (botao) {
-    botao.addEventListener("click", generateImage);
+function conectarEventos() {
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      rodarGeracao();
+    });
+  });
+
+  const btnExato = document.getElementById("generate-btn");
+  if (btnExato) {
+    btnExato.type = "button";
+    btnExato.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      rodarGeracao();
+    });
   }
-});
+
+  document.querySelectorAll("button, input[type='submit'], input[type='button']").forEach((el) => {
+    el.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      rodarGeracao();
+    });
+  });
+}
+
+window.generateImage = rodarGeracao;
+window.gerarImagem = rodarGeracao;
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", conectarEventos);
+} else {
+  conectarEventos();
+}
