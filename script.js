@@ -1,4 +1,4 @@
-const API_TOKEN = "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";
+const API_TOKEN = "HFAKqAb7pRGaiDkTr6RD5XKx2oQQDQX";
 const MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
 
 async function generateImage() {
