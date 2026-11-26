@@ -4,17 +4,29 @@ let emExecucao = false;
 function obterElementos() {
   const campoPrompt =
     document.getElementById("prompt") ||
-    document.querySelector("textarea, input[type='text'], input[type='search'], input:not([type])");
+    document.querySelector(
+      "textarea, input[type='text'], input[type='search'], input:not([type])"
+    );
 
   const loading =
     document.getElementById("loading") ||
     document.querySelector("[id*='load'], [class*='load']");
 
   const resultImg =
-    document.getElementById("result-img") ||
-    document.querySelector("img");
+    document.getElementById("result-img") || document.querySelector("img");
 
   return { campoPrompt, loading, resultImg };
+}
+
+function setLoading(loading, ativo) {
+  if (!loading) return;
+  if (ativo) {
+    loading.classList.remove("hidden");
+    loading.style.display = "block";
+  } else {
+    loading.classList.add("hidden");
+    loading.style.display = "";
+  }
 }
 
 function obterChaveGoogle() {
@@ -22,14 +34,18 @@ function obterChaveGoogle() {
 
   let digitada = "";
   try {
-    digitada = window.prompt("Cole sua chave API do Google AI Studio (AIza...):") || "";
+    const res = window.prompt("Cole sua chave API do Google AI Studio (AIza...):");
+    if (typeof res === "string") {
+      digitada = res.trim();
+    }
   } catch (_) {
     digitada = "";
   }
 
-  digitada = digitada.trim();
   if (!digitada) {
-    alert("Você precisa colar sua chave do Google AI Studio para gerar a foto.");
+    alert(
+      "Nenhuma chave foi informada (ou o navegador bloqueou a janela de prompt). Cole uma chave válida do Google AI Studio (AIza...)."
+    );
     return "";
   }
 
@@ -41,8 +57,9 @@ async function gerarFotoRealistaGoogle(promptTexto, apiKey) {
   const endpoint =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 
-  // Instrução acoplada para forçar estilo fotográfico e ultrarrealista
-  const promptEnriquecido = `A realistic high-resolution photograph of: ${promptTexto}. Highly detailed, 8k resolution, photorealistic, natural lighting, professional photography.`;
+  const promptFotografico =
+    `Realistic photograph of ${promptTexto}. ` +
+    `Captured on a full-frame camera, natural lighting, sharp focus, authentic textures, lifelike details, no watermark, no text overlay.`;
 
   const resp = await fetch(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
@@ -52,37 +69,44 @@ async function gerarFotoRealistaGoogle(promptTexto, apiKey) {
     body: JSON.stringify({
       contents: [
         {
-          parts: [{ text: promptEnriquecido }],
+          parts: [{ text: promptFotografico }],
         },
       ],
     }),
   });
 
-  const dados = await resp.json();
+  const textoBruto = await resp.text();
+  let dados = null;
+  try {
+    dados = textoBruto ? JSON.parse(textoBruto) : null;
+  } catch (_) {
+    dados = null;
+  }
 
   if (!resp.ok) {
     if (resp.status === 400 || resp.status === 401 || resp.status === 403) {
       chaveSessao = "";
     }
-    const detalheErro =
-      (dados && dados.error && dados.error.message) ||
-      JSON.stringify(dados) ||
-      `HTTP ${resp.status}`;
-    throw new Error(`HTTP ${resp.status}: ${detalheErro}`);
+    const msgApi =
+      dados && dados.error && dados.error.message
+        ? dados.error.message
+        : textoBruto || `HTTP ${resp.status}`;
+    throw new Error(`HTTP ${resp.status}: ${msgApi}`);
   }
 
   const candidatos = (dados && dados.candidates) || [];
   for (const cand of candidatos) {
     const partes = (cand && cand.content && cand.content.parts) || [];
     for (const parte of partes) {
-      if (parte.inlineData && parte.inlineData.data) {
-        const mime = parte.inlineData.mimeType || "image/png";
-        return `data:${mime};base64,${parte.inlineData.data}`;
+      const inline = parte.inlineData || parte.inline_data;
+      if (inline && inline.data) {
+        const mime = inline.mimeType || inline.mime_type || "image/png";
+        return `data:${mime};base64,${inline.data}`;
       }
     }
   }
 
-  throw new Error("A API não retornou a imagem gerada.");
+  throw new Error("A resposta da API não retornou nenhuma imagem.");
 }
 
 async function gerarImagem() {
@@ -97,7 +121,7 @@ async function gerarImagem() {
   }
 
   if (!resultImg) {
-    alert("Elemento de imagem não encontrado no seu HTML.");
+    alert("Não encontrei um elemento <img> na página para exibir a foto.");
     return;
   }
 
@@ -105,9 +129,62 @@ async function gerarImagem() {
   if (!apiKey) return;
 
   emExecucao = true;
-  if (loading) loading.classList.remove("hidden");
+  setLoading(loading, true);
 
   try {
     const srcImagem = await gerarFotoRealistaGoogle(descricao, apiKey);
     resultImg.src = srcImagem;
-    resultImg.classList.remove("hidden");
+    resultImg.classList.remove("hidden", "d-none");
+    resultImg.style.display = "block";
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    alert(`Erro ao gerar foto:\n${msg}`);
+  } finally {
+    emExecucao = false;
+    setLoading(loading, false);
+  }
+}
+
+function aoPressionarEnter(ev) {
+  const isEnter = ev.key === "Enter" || ev.keyCode === 13;
+  if (isEnter && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    gerarImagem();
+  }
+}
+
+function iniciarEventos() {
+  const { campoPrompt } = obterElementos();
+
+  document.querySelectorAll("form").forEach((form) => {
+    form.setAttribute("novalidate", "true");
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      gerarImagem();
+    });
+  });
+
+  if (campoPrompt) {
+    campoPrompt.addEventListener("keydown", aoPressionarEnter);
+  }
+
+  const botao =
+    document.getElementById("generate-btn") || document.querySelector("button");
+  if (botao) {
+    botao.type = "button";
+    botao.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      gerarImagem();
+    });
+  }
+}
+
+window.generateImage = gerarImagem;
+window.gerarImagem = gerarImagem;
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", iniciarEventos);
+} else {
+  iniciarEventos();
+}
