@@ -1,3 +1,5 @@
+import { InferenceClient } from "https://cdn.jsdelivr.net/npm/@huggingface/inference@3.1.0/+esm";
+
 const MODELOS_SUPORTADOS = [
   "black-forest-labs/FLUX.1-Krea-dev",
   "ByteDance/Hyper-SD",
@@ -6,11 +8,6 @@ const MODELOS_SUPORTADOS = [
 
 let indiceModeloAtual = 0;
 let tokenSessao = "";
-
-function getModelUrl() {
-  const modelo = MODELOS_SUPORTADOS[indiceModeloAtual];
-  return `https://router.huggingface.co/models/${modelo}`;
-}
 
 async function generateImage() {
   const promptInput = document.getElementById("prompt").value;
@@ -36,38 +33,27 @@ async function generateImage() {
   loading.classList.remove("hidden");
   resultImg.src = "";
 
+  const hf = new InferenceClient(tokenSessao);
+
   try {
-    const response = await fetch(getModelUrl(), {
-      headers: {
-        Authorization: `Bearer ${tokenSessao}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      body: JSON.stringify({ inputs: promptInput }),
+    const modelo = MODELOS_SUPORTADOS[indiceModeloAtual];
+    const imagemBlob = await hf.textToImage({
+      model: modelo,
+      inputs: promptInput.trim(),
     });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        tokenSessao = "";
-      }
-      let detalhes = "";
-      try {
-        const erroJson = await response.json();
-        detalhes = erroJson.error || JSON.stringify(erroJson);
-      } catch (_) {
-        detalhes = await response.text();
-      }
-      throw new Error(`HTTP ${response.status} (${MODELOS_SUPORTADOS[indiceModeloAtual]}): ${detalhes || "Erro na API"}`);
-    }
-
-    const blob = await response.blob();
-    resultImg.src = URL.createObjectURL(blob);
+    resultImg.src = URL.createObjectURL(imagemBlob);
   } catch (error) {
-    const motivo = error && error.message ? error.message : "Falha de conexão ou bloqueio no navegador.";
-    alert(`Falha ao gerar imagem: ${motivo}`);
+    const msg = error && error.message ? error.message : String(error);
+    if (msg.includes("401") || msg.toLowerCase().includes("invalid credentials") || msg.toLowerCase().includes("unauthorized")) {
+      tokenSessao = "";
+    }
+    alert(`Falha ao gerar imagem (${MODELOS_SUPORTADOS[indiceModeloAtual]}): ${msg}`);
     console.error(error);
   } finally {
     btn.disabled = false;
     loading.classList.add("hidden");
   }
 }
+
+window.generateImage = generateImage;
