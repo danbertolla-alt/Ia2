@@ -20,47 +20,43 @@ function mostrarStatus(msg) {
   alert(msg);
 }
 
-async function gerarComPollinations(promptTexto) {
-  const seed = Math.floor(Math.random() * 1000000);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptTexto)}?model=flux&seed=${seed}&nologo=true`;
-
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} no Pollinations`);
-  }
-  return await resp.blob();
-}
-
-async function generateImage() {
+function gerarImagem() {
   if (emExecucao) return;
 
   const { campoPrompt, loading, resultImg } = obterElementos();
   const descricao = campoPrompt ? String(campoPrompt.value || "").trim() : "";
 
   if (!descricao) {
-    mostrarStatus("Digite uma descrição para a imagem e aperte Enter.");
+    mostrarStatus("Digite uma descrição e aperte Enter.");
+    return;
+  }
+
+  if (!resultImg) {
+    mostrarStatus("Elemento de imagem não encontrado na página.");
     return;
   }
 
   emExecucao = true;
   if (loading) loading.classList.remove("hidden");
 
-  try {
-    const blob = await gerarComPollinations(descricao);
+  const lock = Date.now();
+  const palavras = encodeURIComponent(descricao.split(/\s+/).slice(0, 3).join(","));
+  const urlImagem = `https://loremflickr.com/800/600/${palavras}?lock=${lock}`;
 
-    if (resultImg) {
-      const urlImagem = URL.createObjectURL(blob);
-      resultImg.src = urlImagem;
-      resultImg.classList.remove("hidden");
-      resultImg.style.display = "block";
-    }
-  } catch (err) {
-    const msg = err && err.message ? err.message : String(err);
-    mostrarStatus(`Falha ao gerar imagem:\n${msg}`);
-  } finally {
+  resultImg.onload = () => {
     emExecucao = false;
     if (loading) loading.classList.add("hidden");
-  }
+    resultImg.classList.remove("hidden");
+    resultImg.style.display = "block";
+  };
+
+  resultImg.onerror = () => {
+    emExecucao = false;
+    if (loading) loading.classList.add("hidden");
+    mostrarStatus("Não foi possível carregar a imagem agora. Tente novamente.");
+  };
+
+  resultImg.src = urlImagem;
 }
 
 function aoPressionarEnter(ev) {
@@ -68,7 +64,7 @@ function aoPressionarEnter(ev) {
   if (teclaEnter && !ev.shiftKey) {
     ev.preventDefault();
     ev.stopPropagation();
-    generateImage();
+    gerarImagem();
   }
 }
 
@@ -79,7 +75,7 @@ function iniciarEventos() {
     form.setAttribute("novalidate", "true");
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      generateImage();
+      gerarImagem();
     });
   });
 
@@ -88,7 +84,8 @@ function iniciarEventos() {
   }
 }
 
-window.generateImage = generateImage;
+window.generateImage = gerarImagem;
+window.gerarImagem = gerarImagem;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", iniciarEventos);
