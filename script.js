@@ -1,4 +1,4 @@
-const API_TOKEN = "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";
+const API_TOKEN = "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";
 const MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev";
 
 async function generateImage() {
