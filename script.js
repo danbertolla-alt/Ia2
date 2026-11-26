@@ -7,123 +7,158 @@ const MODELOS_SUPORTADOS = [
 let tokenSessao = "";
 let emExecucao = false;
 
-async function rodarGeracao() {
-  if (emExecucao) return;
-
-  const campoTexto =
+function obterElementos() {
+  const campoPrompt =
     document.getElementById("prompt") ||
-    document.querySelector("textarea, input[type='text'], input:not([type])");
+    document.querySelector("textarea, input[type='text'], input[type='search'], input:not([type])");
 
-  const botao =
-    document.getElementById("generate-btn") ||
-    document.querySelector("button, input[type='submit']");
-
-  const carregando =
+  const loading =
     document.getElementById("loading") ||
     document.querySelector("[id*='load'], [class*='load']");
 
-  const imagemSaida =
+  const resultImg =
     document.getElementById("result-img") ||
     document.querySelector("img");
 
-  const descricao = campoTexto ? String(campoTexto.value || "").trim() : "";
+  return { campoPrompt, loading, resultImg };
+}
+
+function mostrarStatus(msg) {
+  alert(msg);
+}
+
+function obterToken() {
+  if (tokenSessao) return tokenSessao;
+
+  let digitado = "";
+  try {
+    digitado = window.prompt("Cole seu token do Hugging Face:") || "";
+  } catch (_) {
+    digitado = "";
+  }
+
+  digitado = digitado.trim();
+  if (!digitado) {
+    mostrarStatus("Informe um token válido do Hugging Face para gerar a imagem.");
+    return "";
+  }
+
+  tokenSessao = digitado;
+  return tokenSessao;
+}
+
+async function chamarModelo(modelo, promptTexto, token) {
+  const url = `https://router.huggingface.co/hf-inference/models/${modelo}`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ inputs: promptTexto }),
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 401) {
+      tokenSessao = "";
+    }
+
+    let detalhe = "";
+    try {
+      const textoErro = await resp.text();
+      detalhe = textoErro;
+    } catch (_) {
+      detalhe = "Sem detalhes na resposta";
+    }
+
+    throw new Error(`HTTP ${resp.status} (${modelo}): ${detalhe}`);
+  }
+
+  const contentType = (resp.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const jsonResp = await resp.json();
+    throw new Error(`Resposta JSON inesperada (${modelo}): ${JSON.stringify(jsonResp)}`);
+  }
+
+  return await resp.blob();
+}
+
+async function generateImage() {
+  if (emExecucao) return;
+
+  const { campoPrompt, loading, resultImg } = obterElementos();
+  const descricao = campoPrompt ? String(campoPrompt.value || "").trim() : "";
 
   if (!descricao) {
-    alert("Digite uma descrição para a imagem antes de clicar.");
+    mostrarStatus("Digite uma descrição e aperte Enter.");
     return;
   }
 
-  if (!tokenSessao) {
-    const digitado = window.prompt("Cole aqui o seu token do Hugging Face (hf_...):");
-    if (!digitado || !digitado.trim()) {
-      alert("Você precisa colar um token hf_... para continuar.");
-      return;
-    }
-    tokenSessao = digitado.trim();
-  }
+  const token = obterToken();
+  if (!token) return;
 
   emExecucao = true;
-  if (botao) botao.disabled = true;
-  if (carregando) carregando.classList.remove("hidden");
+  if (loading) loading.classList.remove("hidden");
 
   try {
-    let ultimoErro = "Falha desconhecida";
+    let ultimoErro = "Nenhum modelo respondeu.";
 
-    for (const modelo of MODELOS_SUPORTADOS) {
-      const url = `https://router.huggingface.co/hf-inference/models/${modelo}`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenSessao}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: descricao }),
-      });
-
-      if (resp.ok) {
-        const blob = await resp.blob();
-        if (imagemSaida) {
-          imagemSaida.src = URL.createObjectURL(blob);
-          imagemSaida.style.display = "block";
+    for (let i = 0; i < MODELOS_SUPORTADOS.length; i++) {
+      const modelo = MODELOS_SUPORTADOS[i];
+      try {
+        const blob = await chamarModelo(modelo, descricao, token);
+        if (resultImg) {
+          const urlImagem = URL.createObjectURL(blob);
+          resultImg.src = urlImagem;
+          resultImg.classList.remove("hidden");
+          resultImg.style.display = "block";
         }
         return;
+      } catch (err) {
+        ultimoErro = err && err.message ? err.message : String(err);
+        if (!tokenSessao) break;
       }
-
-      if (resp.status === 401) {
-        tokenSessao = "";
-        ultimoErro = `HTTP 401 (${modelo}): Token inválido ou recusado`;
-        break;
-      }
-
-      let detalhe = "";
-      try {
-        detalhe = await resp.text();
-      } catch (_) {
-        detalhe = "";
-      }
-      ultimoErro = `HTTP ${resp.status} (${modelo}): ${detalhe || "Sem detalhes"}`;
     }
 
-    alert(`Não foi possível gerar a imagem:\n${ultimoErro}`);
-  } catch (erro) {
-    alert(`Erro no navegador/rede:\n${erro && erro.message ? erro.message : String(erro)}`);
+    mostrarStatus(`Falha ao gerar imagem:\n${ultimoErro}`);
+  } catch (err) {
+    mostrarStatus(`Erro inesperado:\n${err && err.message ? err.message : String(err)}`);
   } finally {
     emExecucao = false;
-    if (botao) botao.disabled = false;
-    if (carregando) carregando.classList.add("hidden");
+    if (loading) loading.classList.add("hidden");
   }
 }
 
-function conectarEventos() {
+function aoPressionarEnter(ev) {
+  const teclaEnter = ev.key === "Enter" || ev.keyCode === 13;
+  if (teclaEnter && !ev.shiftKey) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    generateImage();
+  }
+}
+
+function iniciarEventos() {
+  const { campoPrompt } = obterElementos();
+
   document.querySelectorAll("form").forEach((form) => {
+    form.setAttribute("novalidate", "true");
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      rodarGeracao();
+      generateImage();
     });
   });
 
-  const btnExato = document.getElementById("generate-btn");
-  if (btnExato) {
-    btnExato.type = "button";
-    btnExato.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      rodarGeracao();
-    });
+  if (campoPrompt) {
+    campoPrompt.addEventListener("keydown", aoPressionarEnter);
   }
-
-  document.querySelectorAll("button, input[type='submit'], input[type='button']").forEach((el) => {
-    el.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      rodarGeracao();
-    });
-  });
 }
 
-window.generateImage = rodarGeracao;
-window.gerarImagem = rodarGeracao;
+window.generateImage = generateImage;
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", conectarEventos);
+  document.addEventListener("DOMContentLoaded", iniciarEventos);
 } else {
-  conectarEventos();
+  iniciarEventos();
 }
