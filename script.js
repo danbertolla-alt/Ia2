@@ -1,7 +1,7 @@
 const MODELOS_SUPORTADOS = [
-  "Qwen/Qwen-Image",
   "black-forest-labs/FLUX.1-Krea-dev",
   "ByteDance/Hyper-SD",
+  "Qwen/Qwen-Image",
 ];
 
 let indiceModeloAtual = 0;
@@ -9,7 +9,7 @@ let tokenSessao = "";
 
 function getModelUrl() {
   const modelo = MODELOS_SUPORTADOS[indiceModeloAtual];
-  return `https://router.huggingface.co/hf-inference/models/${modelo}`;
+  return `https://router.huggingface.co/models/${modelo}`;
 }
 
 async function generateImage() {
