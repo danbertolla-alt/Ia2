@@ -1,5 +1,5 @@
-const API_TOKEN = "HFAKqAb7pRGaiDkTr6RD5XKx2oQQDQX";
 const MODEL_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
+let tokenSessao = "";
 
 async function generateImage() {
   const promptInput = document.getElementById("prompt").value;
@@ -12,6 +12,15 @@ async function generateImage() {
     return;
   }
 
+  if (!tokenSessao) {
+    const digitado = prompt("Cole aqui o seu token do Hugging Face (hf_...):");
+    if (!digitado || !digitado.trim()) {
+      alert("Você precisa informar um token para gerar a imagem.");
+      return;
+    }
+    tokenSessao = digitado.trim();
+  }
+
   btn.disabled = true;
   loading.classList.remove("hidden");
   resultImg.src = "";
@@ -19,7 +28,7 @@ async function generateImage() {
   try {
     const response = await fetch(MODEL_URL, {
       headers: {
-        Authorization: `Bearer ${API_TOKEN}`,
+        Authorization: `Bearer ${tokenSessao}`,
         "Content-Type": "application/json",
       },
       method: "POST",
@@ -27,6 +36,9 @@ async function generateImage() {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        tokenSessao = "";
+      }
       let detalhes = "";
       try {
         const erroJson = await response.json();
