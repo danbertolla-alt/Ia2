@@ -1,5 +1,16 @@
-const MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell";
+const MODELOS_SUPORTADOS = [
+  "Qwen/Qwen-Image",
+  "black-forest-labs/FLUX.1-Krea-dev",
+  "ByteDance/Hyper-SD",
+];
+
+let indiceModeloAtual = 0;
 let tokenSessao = "";
+
+function getModelUrl() {
+  const modelo = MODELOS_SUPORTADOS[indiceModeloAtual];
+  return `https://router.huggingface.co/hf-inference/models/${modelo}`;
+}
 
 async function generateImage() {
   const promptInput = document.getElementById("prompt").value;
@@ -26,7 +37,7 @@ async function generateImage() {
   resultImg.src = "";
 
   try {
-    const response = await fetch(MODEL_URL, {
+    const response = await fetch(getModelUrl(), {
       headers: {
         Authorization: `Bearer ${tokenSessao}`,
         "Content-Type": "application/json",
@@ -46,7 +57,7 @@ async function generateImage() {
       } catch (_) {
         detalhes = await response.text();
       }
-      throw new Error(`HTTP ${response.status}: ${detalhes || "Erro na API"}`);
+      throw new Error(`HTTP ${response.status} (${MODELOS_SUPORTADOS[indiceModeloAtual]}): ${detalhes || "Erro na API"}`);
     }
 
     const blob = await response.blob();
