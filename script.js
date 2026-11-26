@@ -1,100 +1,82 @@
-const MODELOS_SUPORTADOS = [
+const MODELOS = [
   "black-forest-labs/FLUX.1-Krea-dev",
   "ByteDance/Hyper-SD",
-  "Qwen/Qwen-Image",
+  "Qwen/Qwen-Image"
 ];
 
-let tokenSessao = "";
-let gerando = false;
-
-async function tentarModelo(modelo, promptTexto, token) {
-  const url = `https://router.huggingface.co/hf-inference/models/${modelo}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ inputs: promptTexto }),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      tokenSessao = "";
-    }
-    let detalhes = "";
-    try {
-      const erroJson = await response.json();
-      detalhes = erroJson.error || JSON.stringify(erroJson);
-    } catch (_) {
-      detalhes = await response.text();
-    }
-    throw new Error(`HTTP ${response.status} (${modelo}): ${detalhes || "Erro na API"}`);
-  }
-
-  return await response.blob();
-}
+let tokenHf = "";
 
 async function generateImage() {
-  if (gerando) return;
+  const campoPrompt = document.getElementById("prompt");
+  const botao = document.getElementById("generate-btn");
+  const carregando = document.getElementById("loading");
+  const imagemResultado = document.getElementById("result-img");
 
-  const promptEl = document.getElementById("prompt");
-  const btn = document.getElementById("generate-btn");
-  const loading = document.getElementById("loading");
-  const resultImg = document.getElementById("result-img");
-
-  const promptTexto = promptEl ? promptEl.value.trim() : "";
-  if (!promptTexto) {
-    alert("Por favor, digite uma descrição para a imagem!");
+  const texto = campoPrompt ? campoPrompt.value.trim() : "";
+  if (!texto) {
+    alert("Digite uma descrição para a imagem.");
     return;
   }
 
-  if (!tokenSessao) {
-    const digitado = prompt("Cole aqui o seu token do Hugging Face (hf_...):");
+  if (!tokenHf) {
+    const digitado = prompt("Cole seu token hf_...:");
     if (!digitado || !digitado.trim()) {
-      alert("Você precisa informar um token para gerar a imagem.");
+      alert("Token obrigatório.");
       return;
     }
-    tokenSessao = digitado.trim();
+    tokenHf = digitado.trim();
   }
 
-  gerando = true;
-  if (btn) btn.disabled = true;
-  if (loading) loading.classList.remove("hidden");
-  if (resultImg) resultImg.src = "";
-
-  let ultimoErro = null;
+  if (botao) botao.disabled = true;
+  if (carregando) carregando.classList.remove("hidden");
 
   try {
-    for (const modelo of MODELOS_SUPORTADOS) {
-      try {
-        const blob = await tentarModelo(modelo, promptTexto, tokenSessao);
-        if (resultImg) {
-          resultImg.src = URL.createObjectURL(blob);
-          resultImg.style.display = "block";
+    let ultimoErro = "";
+
+    for (let i = 0; i < MODELOS.length; i++) {
+      const modelo = MODELOS[i];
+      const url = "https://router.huggingface.co/hf-inference/models/" + modelo;
+
+      const resposta = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + tokenHf,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ inputs: texto })
+      });
+
+      if (resposta.ok) {
+        const blob = await resposta.blob();
+        if (imagemResultado) {
+          imagemResultado.src = URL.createObjectURL(blob);
+          imagemResultado.style.display = "block";
         }
         return;
-      } catch (err) {
-        ultimoErro = err;
-        if (!tokenSessao) break;
       }
+
+      if (resposta.status === 401) {
+        tokenHf = "";
+        ultimoErro = "HTTP 401 (Token inválido)";
+        break;
+      }
+
+      const erroTexto = await resposta.text();
+      ultimoErro = "HTTP " + resposta.status + " (" + modelo + "): " + erroTexto;
     }
 
-    throw ultimoErro || new Error("Nenhum modelo da lista respondeu.");
-  } catch (error) {
-    const motivo = error && error.message ? error.message : String(error);
-    alert(`Falha ao gerar imagem: ${motivo}`);
-    console.error(error);
+    alert("Falhou: " + ultimoErro);
+  } catch (err) {
+    alert("Erro de rede/código: " + (err.message || err));
   } finally {
-    gerando = false;
-    if (btn) btn.disabled = false;
-    if (loading) loading.classList.add("hidden");
+    if (botao) botao.disabled = false;
+    if (carregando) carregando.classList.add("hidden");
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("generate-btn");
-  if (btn) {
-    btn.addEventListener("click", generateImage);
+window.addEventListener("DOMContentLoaded", function () {
+  const botao = document.getElementById("generate-btn");
+  if (botao) {
+    botao.addEventListener("click", generateImage);
   }
 });
