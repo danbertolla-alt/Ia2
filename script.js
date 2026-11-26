@@ -1,21 +1,50 @@
-import { InferenceClient } from "https://cdn.jsdelivr.net/npm/@huggingface/inference@3.1.0/+esm";
-
 const MODELOS_SUPORTADOS = [
   "black-forest-labs/FLUX.1-Krea-dev",
   "ByteDance/Hyper-SD",
   "Qwen/Qwen-Image",
 ];
 
-let indiceModeloAtual = 0;
 let tokenSessao = "";
+let gerando = false;
+
+async function tentarModelo(modelo, promptTexto, token) {
+  const url = `https://router.huggingface.co/hf-inference/models/${modelo}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ inputs: promptTexto }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      tokenSessao = "";
+    }
+    let detalhes = "";
+    try {
+      const erroJson = await response.json();
+      detalhes = erroJson.error || JSON.stringify(erroJson);
+    } catch (_) {
+      detalhes = await response.text();
+    }
+    throw new Error(`HTTP ${response.status} (${modelo}): ${detalhes || "Erro na API"}`);
+  }
+
+  return await response.blob();
+}
 
 async function generateImage() {
-  const promptInput = document.getElementById("prompt").value;
+  if (gerando) return;
+
+  const promptEl = document.getElementById("prompt");
   const btn = document.getElementById("generate-btn");
   const loading = document.getElementById("loading");
   const resultImg = document.getElementById("result-img");
 
-  if (!promptInput.trim()) {
+  const promptTexto = promptEl ? promptEl.value.trim() : "";
+  if (!promptTexto) {
     alert("Por favor, digite uma descrição para a imagem!");
     return;
   }
@@ -29,31 +58,43 @@ async function generateImage() {
     tokenSessao = digitado.trim();
   }
 
-  btn.disabled = true;
-  loading.classList.remove("hidden");
-  resultImg.src = "";
+  gerando = true;
+  if (btn) btn.disabled = true;
+  if (loading) loading.classList.remove("hidden");
+  if (resultImg) resultImg.src = "";
 
-  const hf = new InferenceClient(tokenSessao);
+  let ultimoErro = null;
 
   try {
-    const modelo = MODELOS_SUPORTADOS[indiceModeloAtual];
-    const imagemBlob = await hf.textToImage({
-      model: modelo,
-      inputs: promptInput.trim(),
-    });
-
-    resultImg.src = URL.createObjectURL(imagemBlob);
-  } catch (error) {
-    const msg = error && error.message ? error.message : String(error);
-    if (msg.includes("401") || msg.toLowerCase().includes("invalid credentials") || msg.toLowerCase().includes("unauthorized")) {
-      tokenSessao = "";
+    for (const modelo of MODELOS_SUPORTADOS) {
+      try {
+        const blob = await tentarModelo(modelo, promptTexto, tokenSessao);
+        if (resultImg) {
+          resultImg.src = URL.createObjectURL(blob);
+          resultImg.style.display = "block";
+        }
+        return;
+      } catch (err) {
+        ultimoErro = err;
+        if (!tokenSessao) break;
+      }
     }
-    alert(`Falha ao gerar imagem (${MODELOS_SUPORTADOS[indiceModeloAtual]}): ${msg}`);
+
+    throw ultimoErro || new Error("Nenhum modelo da lista respondeu.");
+  } catch (error) {
+    const motivo = error && error.message ? error.message : String(error);
+    alert(`Falha ao gerar imagem: ${motivo}`);
     console.error(error);
   } finally {
-    btn.disabled = false;
-    loading.classList.add("hidden");
+    gerando = false;
+    if (btn) btn.disabled = false;
+    if (loading) loading.classList.add("hidden");
   }
 }
 
-window.generateImage = generateImage;
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("generate-btn");
+  if (btn) {
+    btn.addEventListener("click", generateImage);
+  }
+});
