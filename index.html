@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Imagens IA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Gerador de Imagens IA</h1>
+    <textarea id="prompt" placeholder="Descreva a imagem que você deseja gerar..."></textarea>
+    <button id="generate-btn" onclick="generateImage()">Gerar Imagem</button>
+    <div id="loading" class="hidden">Gerando sua imagem, aguarde...</div>
+    <div class="result-box">
+      <img id="result-img" alt="" />
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
